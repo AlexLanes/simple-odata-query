@@ -50,7 +50,7 @@ class Select:
             self.campos.append(
                 Campo(
                     nome  = " ".join(partes[: index_as]),
-                    alias = " ".join(partes[: index_as]) or None
+                    alias = " ".join(partes[index_as + 1 :]) or None
                 )
             )
 
