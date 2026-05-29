@@ -1,0 +1,18 @@
+[project]
+name = "simple-odata-query"
+version = "1"
+description = "Pacote para construções de SQLs a partir de Query Parameters estilo OData"
+readme = "README.md"
+requires-python = ">=3.12"
+license = { text = "MIT" }
+authors = [
+    { name = "Alex Angelo", email = "alex_lanes@hotmail.com" }
+]
+dependencies = []
+
+[build-system]
+requires = ["uv_build>=0.8.11,<0.9.0"]
+build-backend = "uv_build"
+
+[tool.uv.build-backend]
+module-root = ""
