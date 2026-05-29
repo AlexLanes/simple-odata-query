@@ -5,6 +5,7 @@ description = "Pacote para construções de SQLs a partir de Query Parameters es
 readme = "README.md"
 requires-python = ">=3.12"
 license = { text = "MIT" }
+urls = { Homepage = "https://github.com/AlexLanes/simple-odata-query" }
 authors = [
     { name = "Alex Angelo", email = "alex_lanes@hotmail.com" }
 ]
