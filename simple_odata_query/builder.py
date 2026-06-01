@@ -73,14 +73,20 @@ class QueryBuilder:
     ```
 
     ### 2. Validar o `QueryBuilder` com uma classe anotada com os campos existentes
+    Possível de se aplicar `Alias` para o nome do campo no banco de dados
     ```
+    from typing import Annotated
     from simple_odata_query import QueryParametersValidationException
 
-    class DadosExemplo:
-        campo1: str
-        campo2: int
+    class Usuarios:
+        id: int
+        nome: str
+        sobrenome: str
+        idade: Annotated[int, "Idade"]
+        nome_sobrenome: Annotated[str, {"alias": "nome e sobrenome"}]
+        criado_em: str = Field(alias="Criado Em") # Default com propriedade "alias"
 
-    try: qb.validar(DadosExemplo)
+    try: qb.validar(Usuarios)
     except QueryParametersValidationException: ...
     ```
 
@@ -181,19 +187,19 @@ class QueryBuilder:
         if erros: setattr(qb, "_erros", erros)
         return qb
 
-    def validar (self, classe_anotada: type[ClasseAnotada | ClasseAnotadaComAlias]) -> Self:
+    def validar (self, classe_anotada: type) -> Self:
         """Invocar os métodos de validação de cada propriedade
         - `classe_anotada` utilizada para validar os campos existentes
         - `QueryParametersValidationException` caso alguma falha de validação"""
         if erros := getattr(self, "_erros", []):
             raise QueryParametersValidationException(
-                mensagem = "Erro na validação de um ou mais parâmetros",
+                mensagem = "Erro na validação de um ou mais Query Parameters",
                 detalhes = {
                     "erros": erros
                 }
             )
 
-        campos = coletar_campos_existentes(classe_anotada)
+        campos = coletar_campos_classe(classe_anotada)
         self.topskip.validar()
         self.select.validar(campos)
         self.orderby.validar(campos)
@@ -244,9 +250,9 @@ class QueryBuilder:
         - `total` obtém o total de itens existentes considerando o `$filter`. Dependente do `$count`"""
         top, skip = self.topskip.to_dict().values()
         metadata = {
-            "$select": self.select.to_sql().removeprefix("SELECT "),
+            "$select": self.select.to_metadata(),
             "$filter": self.filter,
-            "$orderby": self.orderby.to_sql().removeprefix("ORDER BY ") or None,
+            "$orderby": self.orderby.to_metadata(),
             "$top": top,
             "$skip": skip,
             "$count": self.count,

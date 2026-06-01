@@ -70,14 +70,20 @@ qb = QueryBuilder.from_dict({
 ```
 
 ### 2. Validar o `QueryBuilder` com uma classe anotada com os campos existentes
+Possível de se aplicar `Alias` para o nome do campo no banco de dados
 ```python
+from typing import Annotated
 from simple_odata_query import QueryParametersValidationException
 
-class DadosExemplo:
-    campo1: str
-    campo2: int
+class Usuarios:
+    id: int
+    nome: str
+    sobrenome: str
+    idade: Annotated[int, "Idade"]
+    nome_sobrenome: Annotated[str, {"alias": "nome e sobrenome"}]
+    criado_em: str = Field(alias="Criado Em") # Default com propriedade "alias"
 
-try: qb.validar(DadosExemplo)
+try: qb.validar(Usuarios)
 except QueryParametersValidationException: ...
 ```
 

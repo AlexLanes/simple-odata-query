@@ -1,20 +1,39 @@
 # std
-from typing import Iterable
 from dataclasses import dataclass
 # interno
+from .anotacoes import TVersaoCampoSQL
 from . import QueryParametersValidationException
+
+def quote (t: str, char="\"") -> str:
+    """Envolve com o `char` se a `str` tiver espaço"""
+    return f"{char}{t}{char}" if " " in t else t
 
 @dataclass
 class Campo:
-
     nome: str
     alias: str | None = None
+    versao_sql: str | None = None
 
     def to_sql (self) -> str:
+        alias = quote(self.alias or self.nome)
+        versao_sql = (
+            quote(self.versao_sql)
+            if self.versao_sql
+            else quote(self.nome)
+        )
         return (
-            f'"{self.nome}"'
-            if not self.alias else
-            f'"{self.nome}" AS "{self.alias}"'
+            f"{versao_sql} AS {alias}"
+            if versao_sql != alias
+            else versao_sql
+        )
+
+    def to_metadata (self) -> str:
+        nome = quote(self.nome, char="'")
+        alias = quote(self.alias or "", char="'")
+        return (
+            f"{nome} AS {alias}"
+            if alias and nome != alias
+            else nome
         )
 
 class Select:
@@ -42,48 +61,53 @@ class Select:
 
             # Sem alias "campo AS alias"
             if index_as == 0:
-                nome = " ".join(partes)
+                nome = " ".join(partes).strip()
                 self.campos.append(Campo(nome))
                 continue
 
             # Com alias
             self.campos.append(
                 Campo(
-                    nome  = " ".join(partes[: index_as]),
-                    alias = " ".join(partes[index_as + 1 :]) or None
+                    nome  = " ".join(partes[: index_as]).strip(),
+                    alias = " ".join(partes[index_as + 1 :]).strip() or None
                 )
             )
 
-    def validar (self, campos_esperados: Iterable[str]) -> None:
-        """Validar se os campos do `select` estão presentes nos `campos_esperados`
+    def validar (self, esperados: TVersaoCampoSQL) -> None:
+        """Validar se os campos do `select` estão presentes nos `esperados`
+        - Adicionar a `versão_sql` nos `campos`
         - `QueryParametersValidationException` caso algum campo incorreto"""
-        if not self.campos: return
+        if not self.campos:
+            self.campos = [
+                Campo(nome_modelo, versao_sql=versao_sql)
+                for nome_modelo, versao_sql in esperados.items()
+            ]
+            return
 
-        campos = [campo.nome for campo in self.campos]
-        inesperados = [
-            campo
-            for campo in campos
-            if campo not in campos_esperados
-        ]
+        inesperados = list[str]()
+        for campo in self.campos:
+            if campo.nome in esperados:
+                campo.versao_sql = esperados[campo.nome]
+            else: inesperados.append(campo.nome)
 
-        if not inesperados: return
-        raise QueryParametersValidationException(
+        if inesperados: raise QueryParametersValidationException(
             mensagem = "Erro na validação do query parameter '$select'",
             detalhes = {
-                "recebidos": campos,
+                "recebidos": [campo.nome for campo in self.campos],
                 "inesperados": inesperados,
-                "esperados": campos_esperados,
+                "esperados": list(esperados),
             }
         )
 
     def to_sql (self) -> str:
-        """Versão SQL `SELECT` com os campos e alias envolvidos em `"`
-        - `SELECT *` Caso nenhum campo informado"""
-        campos = (
-            "*"
-            if not self.campos else
-            ", ".join(campo.to_sql() for campo in self.campos)
-        )
+        """Versão `SQL: SELECT` com os campos separados por `,`
+        - Campos com espaço são envolvidos em aspas duplas"""
+        campos = ", ".join(campo.to_sql() for campo in self.campos)
         return f"SELECT {campos}"
+
+    def to_metadata (self) -> str:
+        """Versão `@metadata: $select` com os campos separados por `,`
+        - Campos com espaço são envolvidos em aspas"""
+        return ", ".join(campo.to_metadata() for campo in self.campos)
 
 __all__ = ["Select"]

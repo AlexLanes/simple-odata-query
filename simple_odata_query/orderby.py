@@ -1,18 +1,30 @@
 # std
+from typing import Literal
 from dataclasses import dataclass
-from typing import Literal, Iterable
 # interno
+from .anotacoes import TVersaoCampoSQL
 from . import QueryParametersValidationException
 
+def quote (t: str, char="\"") -> str:
+    """Envolve com o `char` se a `str` tiver espaço"""
+    return f"{char}{t}{char}" if " " in t else t
+
 @dataclass
-class CampoValido:
+class OrderValido:
     nome: str
     ordem: Literal["ASC", "DESC"] = "ASC"
     nulls: Literal["FIRST", "LAST"] | None = None
 
     def to_sql (self) -> str:
         return " ".join([
-            f'"{self.nome}"',
+            quote(self.nome),
+            self.ordem,
+            f"NULLS {self.nulls}" if self.nulls else ""
+        ]).rstrip()
+
+    def to_metadata (self) -> str:
+        return " ".join([
+            quote(self.nome, char="'"),
             self.ordem,
             f"NULLS {self.nulls}" if self.nulls else ""
         ]).rstrip()
@@ -24,8 +36,7 @@ class OrderBy:
 
     partes: list[str]
     """Partes do `orderby` separadas pela `,`"""
-    validos: list[CampoValido]
-    """Campos validados"""
+    validos: list[OrderValido]
 
     def __init__ (self, orderby: str | None = None) -> None:
         self.validos = []
@@ -53,8 +64,8 @@ class OrderBy:
 
         return len(parte) - 1
 
-    def validar (self, campos_esperados: Iterable[str]) -> None:
-        """Validar se os campos do `orderby` estão presentes nos `campos_esperados` e com o formato é o esperado
+    def validar (self, esperados: TVersaoCampoSQL) -> None:
+        """Validar se os campos do `orderby` estão presentes nos `esperados` e com o formato é o esperado
         - `QueryParametersValidationException` caso algum campo incorreto"""
         if self.validos or not self.partes:
             return
@@ -63,9 +74,9 @@ class OrderBy:
         for parte in self.partes:
             index_nome = self.index_nome_campo(parte)
             nome = parte[0 : index_nome + 1].strip()
-            campo = CampoValido(nome.strip("'\""))
+            campo = OrderValido(nome.strip("'\""))
 
-            if campo.nome not in campos_esperados:
+            if campo.nome not in esperados:
                 erros.append({
                     "parte": parte,
                     "seção": nome,
@@ -104,15 +115,22 @@ class OrderBy:
             mensagem = "Erro na validação do query parameter '$orderby'",
             detalhes = {
                 "erros": erros,
-                "campos_esperados": campos_esperados,
+                "campos_esperados": list(esperados),
                 "formato_esperado": "campo [ASC|DESC] [NULLS FIRST|LAST], ..."
             }
         )
 
-    def to_sql (self) -> str:
-        """Versão SQL `ORDER BY` com os campos envolvidos em `"`
-        - Retornado `""` caso o `ORDER BY` não tenha sido informado"""
-        campos = ", ".join(campo.to_sql() for campo in self.validos)
-        return f"ORDER BY {campos}" if campos else ""
+    def to_sql (self) -> str | None:
+        """Versão `SQL: ORDER BY` com os campos separados por `,`
+        - Campos com espaço são envolvidos em aspas duplas
+        - Retornado `None` caso o `ORDER BY` não tenha sido informado"""
+        campos = ", ".join(order.to_sql() for order in self.validos)
+        return f"ORDER BY {campos}" if campos else None
+
+    def to_metadata (self) -> str | None:
+        """Versão `@metadata: $orderby` com os campos separados por `,`
+        - Campos com espaço são envolvidos em aspas
+        - Retornado `None` caso o `ORDER BY` não tenha sido informado"""
+        return ", ".join(order.to_metadata() for order in self.validos) or None
 
 __all__ = ["OrderBy"]

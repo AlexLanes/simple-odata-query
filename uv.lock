@@ -5,4 +5,4 @@ requires-python = ">=3.12"
 [[package]]
 name = "simple-odata-query"
 version = "1"
-source = { virtual = "." }
+source = { editable = "." }
