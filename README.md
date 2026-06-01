@@ -106,9 +106,9 @@ response.to_dict()
 ```json
 {
   "@metadata": {
-    "$select": "\"id_linha\"",
+    "$select": "id_linha",
     "$filter": "id_linha < 10",
-    "$orderby": "\"id_linha\" ASC",
+    "$orderby": "id_linha ASC",
     "$top": 3,
     "$skip": 0,
     "$count": true,
