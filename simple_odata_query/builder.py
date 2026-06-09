@@ -1,52 +1,49 @@
 # std
+from typing import Self, Mapping
 from dataclasses import dataclass, field
-from typing import Any, Self, Mapping, Callable
 from urllib.parse import parse_qs as parse_query_string
 # interno
-from .anotacoes import *
-from .select import Select
-from .orderby import OrderBy
-from .top_skip import TopSkip
-from . import QueryParametersValidationException
+from . import *
+from .querys import *
+from .coletor import ColetorModelo
 
 @dataclass
-class QueryBuilder:
+class ODataQueryBuilder:
     """Classe para construções de consultas `SQL` simplificadas com base em `QueryParameters` no estilo `OData`
 
     # Parâmetros
 
-    ### Select
-    #### QueryParameter `$select`
+    ### QueryParameter `$select`
     Utilizado para selecionar os campos desejados no retorno
     - Cada campo pode ter apelido `campo AS alias` e estarem envoltos em aspas `'"`
     - Formato `*` ou `campo [AS alias], "campo espaçado" [AS "alias"], ...`
 
-    ### TopSkip
-    #### QueryParameters `$top` e `$skip`
+    ### QueryParameters `$top` e `$skip`
     Utilizado na realização de paginação do retorno
     - `$skip` quantidade de itens a serem pulados
         - Não deve ser negativo
     - `$top` quantidade máxima de itens retornados
         - Deve ser maior que `0`
         - Não deve ser maior que constante `QueryBuilder.MAX_TOP`
-    ### `TopSkip.SQL_FORMAT`
+    #### `TopSkip.SQL_FORMAT`
     Formato `SQL` da paginação. Pode ser modificado caso sintaxe seja diferente de `LIMIT` e `OFFSET`
 
-    ### OrderBy
-    #### QueryParameter `$orderby`
+    ### QueryParameter `$orderby`
     Utilizado para a ordenação do retorno
     - O `campo` pode estar envolto em aspas `'"` caso possua espaço
     - Formato `campo [ASC|DESC] [NULLS FIRST|LAST], ...`
 
-    ### Filter
-    #### QueryParameter `$filter`
+    ### QueryParameter `$expand`
+    Utilizado para a criação de relação com outras tabelas
+    - Formato `*` ou `expand1, expand2, ...`
+
+    ### QueryParameter `$filter`
     Utilizado para filtrar o retorno
     - Não é aplicado nenhuma validação e apenas adicionado na versão `SQL`
     - Deve ser utilizada a mesma sintaxe do banco de dados
 
-    ### Count
-    #### QueryParameter `$count`
-    Indicação se deve ser feito o `COUNT(*)` como `total` no metadata
+    ### QueryParameter `$count`
+    Indicação se deve ser feito o `COUNT(*) AS total` no metadata
     - Formato `true|false`
 
     <br>
@@ -58,50 +55,65 @@ class QueryBuilder:
     # Utilização
 
     ### 1. Criar o `QueryBuilder` a partir dos query parameters
-    ```
+    ```python
     from simple_odata_query import QueryBuilder
 
     qb = QueryBuilder.from_query("?$count=true&$skip=0&$top=100&$select=campo1%2C%20%27campo2%27%20as%20campo_apelido&$orderby=campo1%2C%20campo2%20DESC%20NULLS%20FIRST&$filter=campo1%20%3C%2010")
     qb = QueryBuilder.from_dict({
-        '$count': 'true',
-        '$skip': '0',
-        '$top': '100',
-        '$select': "campo1, 'campo2' as campo_apelido",
-        '$orderby': 'campo1, campo2 DESC NULLS FIRST',
-        '$filter': 'campo1 < 10'
+        "$select": "campo1, 'campo2' as campo_apelido",
+        "$expand": "expand1, expand2",
+        "$filter": "campo1 < 10"
+        "$orderby": "campo1, campo2 DESC NULLS FIRST",
+        "$skip": "0",
+        "$top": "100",
+        "$count": "true",
     })
     ```
 
-    ### 2. Validar o `QueryBuilder` com uma classe anotada com os campos existentes
-    Possível de se aplicar `Alias` para o nome do campo no banco de dados
-    ```
+    ### 2. Realizar o `build` da classe anotada para obter o `IStatement[IClasseModelo]`
+    - `Field(nome_sql=)` Indicar o nome do campo no banco de dados, caso seja diferente do modelo ou possua espaço
+    - `Field().add_expand(...)` Adicionar uma relação de `$expand` no campo do modelo
+    ```python
     from typing import Annotated
-    from simple_odata_query import QueryParametersValidationException
+    from simple_odata_query import Field, IStatement, QueryParametersValidationException
 
-    class Usuarios:
-        id: int
-        nome: str
-        sobrenome: str
-        idade: Annotated[int, "Idade"]
-        nome_sobrenome: Annotated[str, {"alias": "nome e sobrenome"}]
-        criado_em: str = Field(alias="Criado Em") # Default com propriedade "alias"
+    class AtoresFilme:
+        __tabela__ = "film_actor"
+        id:      Annotated[int, Field(nome_sql="actor_id")]
+        film_id: int
 
-    try: qb.validar(Usuarios)
-    except QueryParametersValidationException: ...
+    class CategoriaFilme:
+        __tabela__ = "film_category"
+        id:      Annotated[int, Field(nome_sql="category_id")]
+        film_id: int
+
+    class Filme:
+        __tabela__ = "film"
+        id:          Annotated[int, Field(nome_sql="film_id")
+                                    .add_expand("atores",    on=(AtoresFilme, "film_id"), include=False)
+                                    .add_expand("categoria", on=(CategoriaFilme, "film_id"), unique=True)]
+        titulo:      Annotated[str, Field(nome_sql="title")]
+        descricao:   Annotated[str, Field(nome_sql="description")]
+        year:        int
+
+    try: statement: IStatement[Filme] = qb.build(Filme)
+    except QueryParametersValidationException as erro:
+        print(erro)
+        raise
     ```
 
-    ### 3. Utilizar o método `execute()` para obter e formatar os dados
-    Deve ser passado para o `execute()` uma função que aceita um `SQL` string e retorna os dados como uma lista das linhas.  
-    ```
+    ### 3. Utilizar o método `execute()` para obter os dados formatados
+    Deve ser passado para o `execute()` uma função que aceita um `SQL` string e retorna os dados como uma lista das linhas
+    ```python
     from typing import Any
-    from simple_odata_query import ResponseExecute
+    from simple_odata_query import ODataResponse
 
     # não deve ser a execução de script, por questão de segurança,
     # devido aceitar mais de 1 comando por vez
     def sql_execute (sql: str) -> list[dict[str, Any]]:
         ...
 
-    response: ResponseExecute = qb.execute("nome_tabela", sql_execute)
+    response: ODataResponse = statement.execute(sql_execute)
     response.to_dict()
     ```
     """
@@ -112,13 +124,15 @@ class QueryBuilder:
     """`$top` e `$skip` para a realização de paginação do retorno"""
     orderby: OrderBy = field(default_factory=OrderBy)
     """`$orderby` para a ordenação do retorno"""
+    expand: Expand = field(default_factory=Expand)
+    """`$expand` para a criação de relação com outras tabelas"""
 
     filter: str | None = None
     """`$filter` utilizado para filtrar o retorno
     - Não é aplicado nenhuma validação e apenas adicionado na versão `SQL`
     - Deve ser utilizada a mesma sintaxe do banco de dados"""
     count: bool = False
-    """`$count` indicação se deve ser feito o `COUNT(*)` como `total` no metadata"""
+    """`$count` indicação se deve ser feito o `COUNT(*) AS total` no metadata"""
 
     MAX_TOP = 1000
     """Valor máximo do `$top`"""
@@ -135,7 +149,7 @@ class QueryBuilder:
     @classmethod
     def from_dict (cls, query: Mapping[str, str]) -> Self:
         """Criar o `QueryBuilder` a partir do mapa de parâmetros `query`
-        - Exceções de tipos inesperados são postergados para o método `.validar()`"""
+        - Exceções de tipos inesperados são postergados para o método `.build()`"""
         qb, erros = cls(), []
         query = {
             k.lower().strip().removeprefix("$"): v
@@ -149,6 +163,10 @@ class QueryBuilder:
         # $orderby
         if orderby := str(query.get("orderby", "")).strip():
             qb.orderby = OrderBy(orderby)
+
+        # $expand
+        if expand := str(query.get("expand", "")).strip():
+            qb.expand = Expand(expand)
 
         # $filter
         if filter := str(query.get("filter", "")).strip():
@@ -181,16 +199,16 @@ class QueryBuilder:
         if ok: qb.topskip = TopSkip(
             top  = int(top) if top is not None else None,
             skip = int(skip) if skip is not None else None,
-            maxtop = QueryBuilder.MAX_TOP
+            maxtop = ODataQueryBuilder.MAX_TOP
         )
 
         if erros: setattr(qb, "_erros", erros)
         return qb
 
-    def validar (self, classe_anotada: type) -> Self:
-        """Invocar os métodos de validação de cada propriedade
-        - `classe_anotada` utilizada para validar os campos existentes
-        - `QueryParametersValidationException` caso alguma falha de validação"""
+    def build[T: IClasseModelo] (self, modelo: type[T]) -> IStatement[T]:
+        """Realizar o build do `Statement` para a classe `modelo`
+        - `QueryParametersValidationException` caso alguma falha de validação
+        - `modelo` Classe modelo com os nomes das propriedades anotadas e nome da `__tabela__`"""
         if erros := getattr(self, "_erros", []):
             raise QueryParametersValidationException(
                 mensagem = "Erro na validação de um ou mais Query Parameters",
@@ -199,70 +217,20 @@ class QueryBuilder:
                 }
             )
 
-        campos = coletar_campos_classe(classe_anotada)
-        self.topskip.validar()
-        self.select.validar(campos)
-        self.orderby.validar(campos)
+        coletor = ColetorModelo.from_modelo(modelo)
+        self.topskip.build()
+        self.select.build(coletor)
+        self.expand.build(coletor)
+        self.orderby.build(coletor)
 
-        return self
-
-    def execute (self, tabela: str, sql_execute: Callable[[str], list[dict[str, Any]]]) -> ResponseExecute:
-        """Executar a consulta na `tabela`
-        - Retornado classe `ResponseExecute` com os dados desejados. Usar `.to_dict()` para transformar
-        - `sql_execute` deve ser uma função que aceita um `SQL` string e retorna os dados como uma lista das linhas
-        - `sql_execute` não deve ser a execução de script, por questão de segurança, devido aceitar mais de 1 comando por vez"""
-        dados = sql_execute(self.to_sql(tabela))
-        metadata = self.to_metadata(
-            returned = len(dados),
-            total = lambda: int(
-                sql_execute(self.to_sql_count(tabela))
-                [0]
-                ["total"]
-            )
-        )
-        return ResponseExecute(
-            metadata = metadata,
-            dados = dados
+        return (
+            Statement(modelo, self)
+            if not self.expand.expands else
+            StatementComExpand(modelo, self)
         )
 
-    def to_sql (self, tabela: str) -> str:
-        """Realizar o build dos parâmetros para a versão `SQL` para o `SELECT`"""
-        return f"""
-            {self.select.to_sql()}
-            FROM {tabela}
-            {f"WHERE {self.filter}" if self.filter else ""}
-            {self.orderby.to_sql()}
-            {self.topskip.to_sql()}
-        """
+# Evitar `Circular Import`
+from .statements.statement import Statement
+from .statements.expand import StatementComExpand
 
-    def to_sql_count (self, tabela: str) -> str:
-        """Realizar o build dos parâmetros para a versão `SQL` para o `count(*) as total`"""
-        return f"""
-            SELECT count(*) as total
-            FROM {tabela}
-            {f"WHERE {self.filter}" if self.filter else ""}
-            {self.topskip.SQL_FORMAT.format(top=1, skip=0)}
-        """
-
-    def to_metadata (self, returned: int, total: Callable[[], int]) -> dict[str, Any]:
-        """Construir um `dict` com campos de metadata
-        - `returned` quantidade de itens retornados
-        - `total` obtém o total de itens existentes considerando o `$filter`. Dependente do `$count`"""
-        top, skip = self.topskip.to_dict().values()
-        metadata = {
-            "$select": self.select.to_metadata(),
-            "$filter": self.filter,
-            "$orderby": self.orderby.to_metadata(),
-            "$top": top,
-            "$skip": skip,
-            "$count": self.count,
-            "returned": returned,
-        }
-
-        if self.count:
-            metadata["total"] = (t := total())
-            metadata["next"] = (skip + top) < t
-
-        return metadata
-
-__all__ = ["QueryBuilder"]
+__all__ = ["ODataQueryBuilder"]

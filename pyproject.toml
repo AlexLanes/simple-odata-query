@@ -1,6 +1,6 @@
 [project]
 name = "simple-odata-query"
-version = "1"
+version = "2"
 description = "Pacote para construções de SQLs a partir de Query Parameters estilo OData"
 readme = "README.md"
 requires-python = ">=3.12"
@@ -17,3 +17,8 @@ build-backend = "uv_build"
 
 [tool.uv.build-backend]
 module-root = ""
+
+[dependency-groups]
+dev = [
+    "psycopg[binary]>=3.3.4",
+]

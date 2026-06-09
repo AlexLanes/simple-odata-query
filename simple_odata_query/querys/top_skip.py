@@ -2,7 +2,7 @@
 from typing import Literal
 from dataclasses import dataclass
 # interno
-from . import QueryParametersValidationException
+from simple_odata_query import QueryParametersValidationException
 
 @dataclass
 class TopSkip:
@@ -27,7 +27,7 @@ class TopSkip:
     """Formato da versão SQL com os parâmetros `top` e `skip`
     - Pode ser modificado caso sintaxe seja diferente de `LIMIT` e `OFFSET`"""
 
-    def validar (self) -> None:
+    def build (self) -> None:
         """Validar se os campos estão no formato e range esperado
         - `QueryParametersValidationException` caso algum campo incorreto"""
         erros = []

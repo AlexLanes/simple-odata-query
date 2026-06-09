@@ -2,24 +2,25 @@
 
 Agilizar a transformação de tabelas ou views em APIs com alta dinamicidade
 
-> Pacote para construções de `SQLs` a partir de Query Parameters estilo OData
-- `QueryBuilder` classe principal para utilização
-- `ResponseExecute` dataclasse com dados e metadatas
-- `QueryParametersValidationException` exceção utilizada em erros
+### `ODataQueryBuilder` classe principal para utilização
+### `QueryParametersValidationException` exceção utilizada em erros
+- `IStatement[IClasseModelo]` interface com o método `execute` preparado para retornar um `ODataResponse`
+- `ODataResponse` dataclasse com os dados e metadados retornados
+- `IClasseModelo` interface modelo esperada com os nomes das propriedades anotadas e nome da `__tabela__`
+- `Field` adicionar informações em um campo. Usar em conjunto ao `Annotated[T, Field()]`
+    - `Field(nome_sql=)` Para indicar o nome do campo no banco de dados, caso seja diferente do modelo ou possua espaço
+    - `Field().add_expand(...)` Adicionar uma relação de `$expand` no campo do modelo
 
-> Devido a utilização de **SQLs** dinâmicos, não utilizar funções com banco de dados que aceitem script, o que permite executar mais de um comando por vez. Dessa forma,
-problemas de **injection maliciosos** são amenizados.
+> Devido a utilização de **SQLs dinâmicos**, não utilizar funções com banco de dados que aceitem script, o que permite executar mais de um comando por vez. Dessa forma, problemas de **injection maliciosos** são amenizados.
 
 # Parâmetros
 
-### Select
-#### QueryParameter `$select`
+### QueryParameter `$select`
 Utilizado para selecionar os campos desejados no retorno
 - Cada campo pode ter apelido `campo AS alias` e estarem envoltos em aspas `'"`
 - Formato `*` ou `campo [AS alias], "campo espaçado" [AS "alias"], ...`
 
-### TopSkip
-#### QueryParameters `$top` e `$skip`
+### QueryParameters `$top` e `$skip`
 Utilizado na realização de paginação do retorno
 - `$skip` quantidade de itens a serem pulados
     - Não deve ser negativo
@@ -29,21 +30,22 @@ Utilizado na realização de paginação do retorno
 #### `TopSkip.SQL_FORMAT`
 Formato `SQL` da paginação. Pode ser modificado caso sintaxe seja diferente de `LIMIT` e `OFFSET`
 
-### OrderBy
-#### QueryParameter `$orderby`
+### QueryParameter `$orderby`
 Utilizado para a ordenação do retorno
 - O `campo` pode estar envolto em aspas `'"` caso possua espaço
 - Formato `campo [ASC|DESC] [NULLS FIRST|LAST], ...`
 
-### Filter
-#### QueryParameter `$filter`
+### QueryParameter `$expand`
+Utilizado para a criação de relação com outras tabelas
+- Formato `*` ou `expand1, expand2, ...`
+
+### QueryParameter `$filter`
 Utilizado para filtrar o retorno
 - Não é aplicado nenhuma validação e apenas adicionado na versão `SQL`
 - Deve ser utilizada a mesma sintaxe do banco de dados
 
-### Count
-#### QueryParameter `$count`
-Indicação se deve ser feito o `COUNT(*)` como `total` no metadata
+### QueryParameter `$count`
+Indicação se deve ser feito o `COUNT(*) AS total` no metadata
 - Formato `true|false`
 
 <br>
@@ -60,72 +62,95 @@ from simple_odata_query import QueryBuilder
 
 qb = QueryBuilder.from_query("?$count=true&$skip=0&$top=100&$select=campo1%2C%20%27campo2%27%20as%20campo_apelido&$orderby=campo1%2C%20campo2%20DESC%20NULLS%20FIRST&$filter=campo1%20%3C%2010")
 qb = QueryBuilder.from_dict({
-    '$count': 'true',
-    '$skip': '0',
-    '$top': '100',
-    '$select': "campo1, 'campo2' as campo_apelido",
-    '$orderby': 'campo1, campo2 DESC NULLS FIRST',
-    '$filter': 'campo1 < 10'
+    "$select": "campo1, 'campo2' as campo_apelido",
+    "$expand": "expand1, expand2",
+    "$filter": "campo1 < 10"
+    "$orderby": "campo1, campo2 DESC NULLS FIRST",
+    "$skip": "0",
+    "$top": "100",
+    "$count": "true",
 })
 ```
 
-### 2. Validar o `QueryBuilder` com uma classe anotada com os campos existentes
-Possível de se aplicar `Alias` para o nome do campo no banco de dados
+### 2. Realizar o `build` da classe anotada para obter o `IStatement[IClasseModelo]`
+- `Field(nome_sql=)` Indicar o nome do campo no banco de dados, caso seja diferente do modelo ou possua espaço
+- `Field().add_expand(...)` Adicionar uma relação de `$expand` no campo do modelo
 ```python
 from typing import Annotated
-from simple_odata_query import QueryParametersValidationException
+from simple_odata_query import Field, IStatement, QueryParametersValidationException
 
-class Usuarios:
-    id: int
-    nome: str
-    sobrenome: str
-    idade: Annotated[int, "Idade"]
-    nome_sobrenome: Annotated[str, {"alias": "nome e sobrenome"}]
-    criado_em: str = Field(alias="Criado Em") # Default com propriedade "alias"
+class AtoresFilme:
+    __tabela__ = "film_actor"
+    id:      Annotated[int, Field(nome_sql="actor_id")]
+    film_id: int
 
-try: qb.validar(Usuarios)
-except QueryParametersValidationException: ...
+class CategoriaFilme:
+    __tabela__ = "film_category"
+    id:      Annotated[int, Field(nome_sql="category_id")]
+    film_id: int
+
+class Filme:
+    __tabela__ = "film"
+    id:          Annotated[int, Field(nome_sql="film_id")
+                                .add_expand("atores",    on=(AtoresFilme, "film_id"), include=False)
+                                .add_expand("categoria", on=(CategoriaFilme, "film_id"), unique=True)]
+    titulo:      Annotated[str, Field(nome_sql="title")]
+    descricao:   Annotated[str, Field(nome_sql="description")]
+    year:        int
+
+try: statement: IStatement[Filme] = qb.build(Filme)
+except QueryParametersValidationException as erro:
+    print(erro)
+    raise
 ```
 
-### 3. Utilizar o método `execute()` para obter e formatar os dados
-Deve ser passado para o `execute()` uma função que aceita um `SQL` string e retorna os dados como uma lista das linhas.  
+### 3. Utilizar o método `execute()` para obter os dados formatados
+Deve ser passado para o `execute()` uma função que aceita um `SQL` string e retorna os dados como uma lista das linhas
 ```python
 from typing import Any
-from simple_odata_query import ResponseExecute
+from simple_odata_query import ODataResponse
 
 # não deve ser a execução de script, por questão de segurança,
 # devido aceitar mais de 1 comando por vez
 def sql_execute (sql: str) -> list[dict[str, Any]]:
     ...
 
-response: ResponseExecute = qb.execute("nome_tabela", sql_execute)
+response: ODataResponse = statement.execute(sql_execute)
 response.to_dict()
 ```
 
-## Exemplo **ResponseExecute**
+## Exemplo **ODataResponse**
 ```json
 {
-  "@metadata": {
-    "$select": "id_linha",
-    "$filter": "id_linha < 10",
-    "$orderby": "id_linha ASC",
-    "$top": 3,
-    "$skip": 0,
-    "$count": true,
-    "returned": 3,
-    "total": 5,
-    "next": true
-  },
-  "dados": [
-    {
-      "id_linha": 5
-    },
-    {
-      "id_linha": 6
-    },
-    {
-      "id_linha": 7
-    }
-  ]
+	"@metadata": {
+		"$select": "*",
+		"$expand": "atores, categoria",
+		"$filter": null,
+		"$orderby": null,
+		"$top": 1,
+		"$skip": 0,
+		"$count": true,
+		"elapsed_ms": 9.14,
+		"returned": 1,
+		"total": 1000,
+		"next": true
+	},
+	"dados": [
+		{
+			"id": 1,
+			"titulo": "Alone Trip",
+			"descricao": "A Fast-Paced Character Study of a Composer And a Dog who must Outgun a Boat in An Abandoned Fun House",
+			"year": 2006,
+			"atores": [
+                { "id": 3  },
+                { "id": 12 },
+                { "id": 13 }
+            ],
+			"categoria": {
+				"id": 12,
+				"film_id": 17
+			}
+		}
+	]
 }
 ```

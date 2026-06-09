@@ -2,15 +2,13 @@
 from typing import Literal
 from dataclasses import dataclass
 # interno
-from .anotacoes import TVersaoCampoSQL
-from . import QueryParametersValidationException
-
-def quote (t: str, char="\"") -> str:
-    """Envolve com o `char` se a `str` tiver espaço"""
-    return f"{char}{t}{char}" if " " in t else t
+from . import quote
+from simple_odata_query.coletor import ColetorModelo
+from simple_odata_query import QueryParametersValidationException
 
 @dataclass
 class OrderValido:
+
     nome: str
     ordem: Literal["ASC", "DESC"] = "ASC"
     nulls: Literal["FIRST", "LAST"] | None = None
@@ -64,8 +62,8 @@ class OrderBy:
 
         return len(parte) - 1
 
-    def validar (self, esperados: TVersaoCampoSQL) -> None:
-        """Validar se os campos do `orderby` estão presentes nos `esperados` e com o formato é o esperado
+    def build (self, coletor: ColetorModelo) -> None:
+        """Validar se os campos do `orderby` estão presentes no `coletor` e se o formato é o esperado
         - `QueryParametersValidationException` caso algum campo incorreto"""
         if self.validos or not self.partes:
             return
@@ -76,7 +74,7 @@ class OrderBy:
             nome = parte[0 : index_nome + 1].strip()
             campo = OrderValido(nome.strip("'\""))
 
-            if campo.nome not in esperados:
+            if campo.nome not in coletor.campos:
                 erros.append({
                     "parte": parte,
                     "seção": nome,
@@ -115,7 +113,7 @@ class OrderBy:
             mensagem = "Erro na validação do query parameter '$orderby'",
             detalhes = {
                 "erros": erros,
-                "campos_esperados": list(esperados),
+                "campos_esperados": coletor.campos_modelo,
                 "formato_esperado": "campo [ASC|DESC] [NULLS FIRST|LAST], ..."
             }
         )

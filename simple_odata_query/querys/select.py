@@ -1,31 +1,35 @@
 # std
 from dataclasses import dataclass
 # interno
-from .anotacoes import TVersaoCampoSQL
-from . import QueryParametersValidationException
+from simple_odata_query.coletor import ColetorModelo
+from simple_odata_query import QueryParametersValidationException
 
 def quote (t: str, char="\"") -> str:
     """Envolve com o `char` se a `str` tiver espaço"""
     return f"{char}{t}{char}" if " " in t else t
 
 @dataclass
-class Campo:
+class CampoSelect:
+
     nome: str
     alias: str | None = None
-    versao_sql: str | None = None
+    nome_sql: str | None = None
 
-    def to_sql (self) -> str:
+    def to_sql_alias (self) -> str:
         alias = quote(self.alias or self.nome)
-        versao_sql = (
-            quote(self.versao_sql)
-            if self.versao_sql
+        nome_sql = (
+            quote(self.nome_sql)
+            if self.nome_sql
             else quote(self.nome)
         )
         return (
-            f"{versao_sql} AS {alias}"
-            if versao_sql != alias
-            else versao_sql
+            f"{nome_sql} AS {alias}"
+            if nome_sql != alias else
+            nome_sql
         )
+
+    def to_sql_model (self) -> str:
+        return quote(self.nome)
 
     def to_metadata (self) -> str:
         nome = quote(self.nome, char="'")
@@ -41,7 +45,7 @@ class Select:
     - Cada campo pode ter apelido `campo AS alias` e estarem envoltos em aspas `'"`
     - Formato `campo [AS alias], "campo espaçado" [AS "alias"], ...`"""
 
-    campos: list[Campo]
+    campos: list[CampoSelect]
 
     def __init__ (self, select: str | None = None) -> None:
         self.campos = []
@@ -62,32 +66,31 @@ class Select:
             # Sem alias "campo AS alias"
             if index_as == 0:
                 nome = " ".join(partes).strip()
-                self.campos.append(Campo(nome))
+                self.campos.append(CampoSelect(nome))
                 continue
 
             # Com alias
             self.campos.append(
-                Campo(
+                CampoSelect(
                     nome  = " ".join(partes[: index_as]).strip(),
                     alias = " ".join(partes[index_as + 1 :]).strip() or None
                 )
             )
 
-    def validar (self, esperados: TVersaoCampoSQL) -> None:
-        """Validar se os campos do `select` estão presentes nos `esperados`
-        - Adicionar a `versão_sql` nos `campos`
+    def build (self, coletor: ColetorModelo) -> None:
+        """Validar se os campos do `select` estão presentes no `coletor` e adicionar a `versão_sql` nos `self.campos`
         - `QueryParametersValidationException` caso algum campo incorreto"""
         if not self.campos:
             self.campos = [
-                Campo(nome_modelo, versao_sql=versao_sql)
-                for nome_modelo, versao_sql in esperados.items()
+                CampoSelect(nome_modelo, nome_sql=nome_sql)
+                for nome_modelo, nome_sql in coletor.campos.items()
             ]
             return
 
         inesperados = list[str]()
         for campo in self.campos:
-            if campo.nome in esperados:
-                campo.versao_sql = esperados[campo.nome]
+            if campo.nome in coletor.campos:
+                campo.nome_sql = coletor.campos[campo.nome]
             else: inesperados.append(campo.nome)
 
         if inesperados: raise QueryParametersValidationException(
@@ -95,14 +98,20 @@ class Select:
             detalhes = {
                 "recebidos": [campo.nome for campo in self.campos],
                 "inesperados": inesperados,
-                "esperados": list(esperados),
+                "esperados": coletor.campos_modelo,
             }
         )
 
-    def to_sql (self) -> str:
-        """Versão `SQL: SELECT` com os campos separados por `,`
+    def to_sql_alias (self) -> str:
+        """Versão `SQL: SELECT` com os campos separados por `,` e renomeados da versão sql para modelo
         - Campos com espaço são envolvidos em aspas duplas"""
-        campos = ", ".join(campo.to_sql() for campo in self.campos)
+        campos = ", ".join(campo.to_sql_alias() for campo in self.campos)
+        return f"SELECT {campos}"
+
+    def to_sql_model (self) -> str:
+        """Versão `SQL: SELECT` com os campos separados por `,` com nomes da versão do modelo
+        - Campos com espaço são envolvidos em aspas duplas"""
+        campos = ", ".join(campo.to_sql_model() for campo in self.campos)
         return f"SELECT {campos}"
 
     def to_metadata (self) -> str:
@@ -110,4 +119,4 @@ class Select:
         - Campos com espaço são envolvidos em aspas"""
         return ", ".join(campo.to_metadata() for campo in self.campos)
 
-__all__ = ["Select"]
+__all__ = ["Select", "quote"]
