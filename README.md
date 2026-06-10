@@ -135,7 +135,7 @@ response.to_dict()
 		"total": 1000,
 		"next": true
 	},
-	"dados": [
+	"results": [
 		{
 			"id": 1,
 			"titulo": "Alone Trip",

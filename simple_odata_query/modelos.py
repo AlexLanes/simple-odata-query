@@ -70,17 +70,17 @@ class ODataResponse:
     - Usar `to_dict()` para transformar"""
 
     metadata: dict[str, Any]
-    dados: list[dict[str, Any]]
+    results: list[dict[str, Any]]
 
     def __repr__ (self) -> str:
-        return f"<ODataResponse returned={len(self.dados)}>"
+        return f"<ODataResponse returned={len(self.results)}>"
 
-    def to_dict (self, nome_dados="dados") -> dict[str, Any]:
+    def to_dict (self, nome_results="results") -> dict[str, Any]:
         """Transformar o para a versão `dict`
-        - `nome_dados` para renomear o campo `dados`"""
+        - `nome_results` para renomear o campo `results`"""
         return {
             "@metadata": self.metadata,
-            nome_dados: self.dados
+            nome_results: self.results
         }
 
 __all__ = [

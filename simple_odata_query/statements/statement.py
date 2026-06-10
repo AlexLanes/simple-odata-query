@@ -1,6 +1,7 @@
 # std
 from time import perf_counter
 from typing import Any, Callable
+from functools import cached_property
 # interno
 from simple_odata_query import *
 from simple_odata_query.builder import ODataQueryBuilder
@@ -38,9 +39,20 @@ class Statement[T: IClasseModelo] (IStatement[T]):
         )
 
         return ODataResponse(
-            dados    = dados,
-            metadata = metadata
+            metadata = metadata,
+            results  = dados,
         )
+
+    @cached_property
+    def sql_tabela_cte (self) -> str:
+        """Criar a `TABELA_CTE` com o `WITH`
+        - Nomes dos campos devidamente traduzidos para o modelo"""
+        return "\n".join((
+            f"WITH {self.TABELA_CTE} AS (",
+            f"    {self.qb.select.to_sql_alias()}",
+            f"    FROM {self.tabela}",
+            ")"
+        ))
 
     def to_sql (self) -> str:
         """Realizar o build dos parâmetros para a versão `SQL: SELECT`
@@ -48,11 +60,7 @@ class Statement[T: IClasseModelo] (IStatement[T]):
         return "\n".join(
             linha
             for linha in (
-                f"WITH {self.TABELA_CTE} AS (",
-                    f"    {self.qb.select.to_sql_alias()}",
-                    f"    FROM {self.tabela}",
-                ")",
-
+                self.sql_tabela_cte,
                 "SELECT *",
                 f"FROM {self.TABELA_CTE}",
                 f"WHERE {self.qb.filter}" if self.qb.filter else "",
@@ -68,11 +76,7 @@ class Statement[T: IClasseModelo] (IStatement[T]):
         return "\n".join(
             linha
             for linha in (
-                f"WITH {self.TABELA_CTE} AS (",
-                    f"    {self.qb.select.to_sql_alias()}",
-                    f"    FROM {self.tabela}",
-                ")",
-
+                self.sql_tabela_cte,
                 "SELECT COUNT(*) AS total",
                 f"FROM {self.TABELA_CTE}",
                 f"WHERE {self.qb.filter}" if self.qb.filter else "",

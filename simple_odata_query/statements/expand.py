@@ -1,6 +1,7 @@
 # std
 from time import perf_counter
 from itertools import groupby
+from functools import cached_property
 from typing import Any, Callable, override
 # interno
 from .statement import Statement
@@ -12,6 +13,7 @@ class StatementComExpand[T: IClasseModelo] (Statement[T]):
 
     coletor: ColetorModelo
     campos_expand_faltando_select: set[str]
+    """Campos que são de relações do `$expand` que não foram inclusos no `$select`"""
 
     TABELA_CTE_EXPAND = "cte_odata_builder_expand"
 
@@ -33,19 +35,12 @@ class StatementComExpand[T: IClasseModelo] (Statement[T]):
         nome = f"{self.modelo.__module__}.{self.modelo.__name__}"
         return f"<Statement tabela={self.tabela!r} modelo={nome!r} expands={expands!r}>"
 
-    @property
-    def expands (self) -> list[ExpandData]:
-        return sorted(
-            self.qb.expand.expands,
-            key = lambda e: e.identificador
-        )
-
     @override
     def execute (self, sql_execute) -> ODataResponse:
         inicio = perf_counter()
 
         dados = sql_execute(self.to_sql())
-        self.update(sql_execute, dados)
+        self.update_expands(sql_execute, dados)
 
         metadata = self.to_metadata(
             inicio   = inicio,
@@ -58,32 +53,30 @@ class StatementComExpand[T: IClasseModelo] (Statement[T]):
         )
 
         return ODataResponse(
-            dados    = dados,
-            metadata = metadata
+            metadata = metadata,
+            results  = dados,
         )
 
+    @cached_property
     @override
-    def to_sql (self) -> str:
-        """Realizar o build dos parâmetros para a versão `SQL: SELECT`
-        - Utilizado `WITH` devido aos possíveis `ALIAS` nos campos
-        - Adicionado campos que sejam `Coletor.expands` mesmo que não tenham sido requisitados no `$select`"""
-        return "\n".join(
-            linha
-            for linha in (
-                f"WITH {self.TABELA_CTE} AS (",
-                    f"    {self.select_com_campos_de_expand()}",
-                    f"    FROM {self.tabela}",
-                ")",
+    def sql_tabela_cte (self) -> str:
+        # Adicionado campos que sejam `Coletor.expands` mesmo que não tenham sido requisitados no `$select`
+        return "\n".join((
+            f"WITH {self.TABELA_CTE} AS (",
+            f"    {self.select_com_campos_de_expand}",
+            f"    FROM {self.tabela}",
+            ")"
+        ))
 
-                "SELECT *",
-                f"FROM {self.TABELA_CTE}",
-                f"WHERE {self.qb.filter}" if self.qb.filter else "",
-                self.qb.orderby.to_sql(),
-                self.qb.topskip.to_sql(),
-            )
-            if linha
+    @property
+    def expands (self) -> list[ExpandData]:
+        """Expands ordenados pelo identificador primário"""
+        return sorted(
+            self.qb.expand.expands,
+            key = lambda e: e.identificador
         )
 
+    @cached_property
     def select_com_campos_de_expand (self) -> str:
         # Todos os campos de expand já presentes no `$select`
         sql = self.qb.select.to_sql_alias()
@@ -92,11 +85,11 @@ class StatementComExpand[T: IClasseModelo] (Statement[T]):
 
         # Necessário incluir os campos do `$expand`
         partes = [sql]
-        for campo in self.campos_expand_faltando_select:
-            partes.append(
-                CampoSelect(nome=campo, nome_sql=self.coletor.campos[campo])
-                .to_sql_alias()
-            )
+        partes.extend(
+            CampoSelect(nome=campo, nome_sql=self.coletor.campos[campo])
+            .to_sql_alias()
+            for campo in self.campos_expand_faltando_select
+        )
         return ", ".join(partes)
 
     def expand_to_sql_model (self, expand: ExpandData) -> str:
@@ -113,10 +106,7 @@ class StatementComExpand[T: IClasseModelo] (Statement[T]):
         return "\n".join(
             linha
             for linha in (
-                f"WITH {self.TABELA_CTE} AS (",
-                f"    {self.select_com_campos_de_expand()}",
-                f"    FROM {self.tabela}",
-                "),",
+                self.sql_tabela_cte + ",",
 
                 f"{self.TABELA_CTE_EXPAND} AS (",
                 f"    SELECT {campo_identificador}",
@@ -135,10 +125,9 @@ class StatementComExpand[T: IClasseModelo] (Statement[T]):
             if linha and not linha.isspace()
         )
 
-    def update (self, sql_execute: Callable[[str], list[dict[str, Any]]],
-                      dados: list[dict[str, Any]]) -> None:
-        """Adicionar os expands em `dados` caso tenha sido requisitado
-        - Remover as chaves que foram adicionadas por causa do `$expand`"""
+    def update_expands (self, sql_execute: Callable[[str], list[dict[str, Any]]],
+                              dados: list[dict[str, Any]]) -> None:
+        """Adicionar os expands em `dados` e remover as chaves do `campos_expand_faltando_select`"""
         for nome_identificador, expands in groupby(self.expands, lambda e: e.identificador):
             expands = list(expands)
             ultimo_expand = expands[-1]
