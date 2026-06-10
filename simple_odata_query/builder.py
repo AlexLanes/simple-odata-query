@@ -209,6 +209,8 @@ class ODataQueryBuilder:
         """Realizar o build do `Statement` para a classe `modelo`
         - `QueryParametersValidationException` caso alguma falha de validação
         - `modelo` Classe modelo com os nomes das propriedades anotadas e nome da `__tabela__`"""
+        if getattr(self, "_built", False):
+            raise RuntimeError("Não reutilizar o ODataQueryBuilder.build()")
         if erros := getattr(self, "_erros", []):
             raise QueryParametersValidationException(
                 mensagem = "Erro na validação de um ou mais Query Parameters",
@@ -223,6 +225,7 @@ class ODataQueryBuilder:
         self.expand.build(coletor)
         self.orderby.build(coletor)
 
+        setattr(self, "_built", True)
         return (
             Statement(modelo, self)
             if not self.expand.expands else
