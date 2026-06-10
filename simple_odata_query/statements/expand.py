@@ -66,7 +66,7 @@ class StatementComExpand[T: IClasseModelo] (Statement[T]):
     def to_sql (self) -> str:
         """Realizar o build dos parâmetros para a versão `SQL: SELECT`
         - Utilizado `WITH` devido aos possíveis `ALIAS` nos campos
-        - Adicionado campos que sejam `ExpandField` mesmo que não tenham sido requisitados no `$select`"""
+        - Adicionado campos que sejam `Coletor.expands` mesmo que não tenham sido requisitados no `$select`"""
         return "\n".join(
             linha
             for linha in (
