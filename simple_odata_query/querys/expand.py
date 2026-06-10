@@ -1,5 +1,5 @@
 # interno
-from simple_odata_query.coletor import ColetorModelo, ExpandData
+from simple_odata_query.coletor import *
 from simple_odata_query import QueryParametersValidationException
 
 class Expand:

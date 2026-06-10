@@ -5,9 +5,9 @@ from functools import cached_property
 from typing import Any, Callable, override
 # interno
 from simple_odata_query import *
-from simple_odata_query.statements.statement import Statement
+from simple_odata_query.coletor import *
+from simple_odata_query.statements import Statement
 from simple_odata_query.querys.select import CampoSelect, quote
-from simple_odata_query.coletor import ColetorModelo, ExpandData
 
 class StatementComExpand[T: IClasseModelo] (Statement[T]):
 

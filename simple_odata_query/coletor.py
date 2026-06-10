@@ -108,4 +108,7 @@ class ColetorModelo:
         CACHE_COLETOR[hash_modelo] = coletor
         return coletor
 
-__all__ = ["ColetorModelo"]
+__all__ = [
+    "ExpandData",
+    "ColetorModelo",
+]

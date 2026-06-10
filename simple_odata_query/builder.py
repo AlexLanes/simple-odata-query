@@ -233,7 +233,6 @@ class ODataQueryBuilder:
         )
 
 # Evitar `Circular Import`
-from .statements.statement import Statement
-from .statements.expand import StatementComExpand
+from simple_odata_query.statements import Statement, StatementComExpand
 
 __all__ = ["ODataQueryBuilder"]
