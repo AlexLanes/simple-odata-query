@@ -6,7 +6,7 @@ from typing import (
     get_type_hints, get_origin, get_args,
 )
 # interno
-from . import IClasseModelo, Field
+from simple_odata_query import IClasseModelo, Field
 
 CACHE_COLETOR: dict[int, ColetorModelo] = {}
 """`{ hash_modelo: ColetorModelo }`"""

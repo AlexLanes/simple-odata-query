@@ -3,9 +3,9 @@ from typing import Self, Mapping
 from dataclasses import dataclass, field
 from urllib.parse import parse_qs as parse_query_string
 # interno
-from . import *
-from .querys import *
-from .coletor import ColetorModelo
+from simple_odata_query import *
+from simple_odata_query.querys import *
+from simple_odata_query.coletor import ColetorModelo
 
 @dataclass
 class ODataQueryBuilder:

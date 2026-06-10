@@ -1,7 +1,7 @@
 # std
 from typing import Any, Callable
 # interno
-from simple_odata_query import IClasseModelo, ODataResponse
+from simple_odata_query.modelos import IClasseModelo, ODataResponse
 
 class IStatement[T: IClasseModelo]:
     """Interface `Statement[IClasseModelo]` com o método `execute` preparado para retornar um `ODataResponse`

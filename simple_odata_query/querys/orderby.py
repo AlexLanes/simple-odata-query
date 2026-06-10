@@ -2,7 +2,7 @@
 from typing import Literal
 from dataclasses import dataclass
 # interno
-from . import quote
+from simple_odata_query.querys import quote
 from simple_odata_query.coletor import ColetorModelo
 from simple_odata_query import QueryParametersValidationException
 

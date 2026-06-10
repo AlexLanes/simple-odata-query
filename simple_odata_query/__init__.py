@@ -8,8 +8,7 @@
     - `Field(nome_sql=)` Para indicar o nome do campo no banco de dados, caso seja diferente do modelo ou possua espaço
     - `Field().add_expand(...)` Adicionar uma relação de `$expand` no campo do modelo"""
 
-from .modelos import *
-from .statements import IStatement
-from .exception import QueryParametersValidationException
+from simple_odata_query.exception import QueryParametersValidationException
+from simple_odata_query.modelos import Field, IClasseModelo, IStatement, ODataResponse
 
-from .builder import ODataQueryBuilder
+from simple_odata_query.builder import ODataQueryBuilder

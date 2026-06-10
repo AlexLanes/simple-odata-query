@@ -1,1 +1,1 @@
-from .interface import IStatement
+"""Implementações do `modelos.IStatement`"""
